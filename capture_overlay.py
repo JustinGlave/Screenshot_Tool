@@ -1,8 +1,7 @@
 """Fullscreen translucent overlay for click-drag region selection."""
 
 import tkinter as tk
-import mss
-from PIL import Image, ImageTk, ImageEnhance
+from PIL import Image, ImageTk, ImageEnhance, ImageGrab
 
 
 class CaptureOverlay:
@@ -24,12 +23,9 @@ class CaptureOverlay:
         else:
             self.root = root
 
-        # Grab full desktop
-        with mss.mss() as sct:
-            full = sct.grab(sct.monitors[0])
-            self.full_width = full.width
-            self.full_height = full.height
-            self.bg_image_pil = Image.frombytes("RGB", full.size, full.bgra, "raw", "BGRX")
+        # Grab full desktop (all monitors combined)
+        self.bg_image_pil = ImageGrab.grab(all_screens=True)
+        self.full_width, self.full_height = self.bg_image_pil.size
 
         self.overlay = tk.Toplevel(self.root)
         self.overlay.overrideredirect(True)
