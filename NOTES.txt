@@ -9,6 +9,17 @@
     desktop shortcut, Start Menu entry, and Inno Setup installer wizard
 
 --------------------------------------------------------------------------------
+ v1.2.0 — 2026-04-24
+--------------------------------------------------------------------------------
+  - Home window opens on launch with Snip Now, 3s Timer, and 5s Timer buttons
+  - Capture timer shows a corner countdown overlay (3 or 5 seconds) before capture
+  - Custom save location — pick any folder from the home window; choice persists
+    between sessions via ~/.screenshot_tool/config.json
+  - System tray now has Open (shows home window), New Snip, and Exit options
+  - Closing the home window minimizes to tray instead of exiting
+  - Refactored to single shared Tk root — eliminates multiple-Tk conflicts
+
+--------------------------------------------------------------------------------
  v1.1.0 — 2026-04-24
 --------------------------------------------------------------------------------
   - System tray icon — app stays running in the background after launch;

@@ -6,7 +6,10 @@ A lightweight screenshot and annotation tool for Windows, inspired by the Window
 
 - **Click and drag** to capture any region of the screen
 - **Auto-saves** every capture to `~/Pictures/Screenshots/`
-- **System tray** — app lives in the tray after launch; right-click for New Snip or Exit
+- **Home window** — app opens to a launcher with Snip Now, 3s Timer, and 5s Timer buttons
+- **Capture timer** — 3 or 5 second countdown with a corner overlay before capture begins
+- **Custom save location** — choose any folder from the home window; persists between sessions
+- **System tray** — app lives in the tray after the home window is closed; right-click for Open, New Snip, or Exit
 - **Global hotkey** — `Ctrl+Shift+S` triggers a new snip from anywhere, even when minimized to tray
 - **Annotation tools:**
   - Pen — freehand drawing
