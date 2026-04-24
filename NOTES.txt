@@ -1,0 +1,30 @@
+================================================================================
+ Screenshot Tool — Release Notes
+================================================================================
+
+--------------------------------------------------------------------------------
+ v1.0.0 — 2026-04-24
+--------------------------------------------------------------------------------
+Initial release.
+
+Features:
+  - Click-and-drag region capture with fullscreen darkened overlay
+  - Live selection size readout while dragging
+  - Auto-saves every capture to ~/Pictures/Screenshots/ with a timestamp
+  - Global hotkey: Ctrl+Shift+S triggers a new snip from anywhere
+  - Annotation editor with:
+      - Pen (freehand drawing)
+      - Marker (semi-transparent highlight with opacity slider)
+      - Eraser — erase to white OR erase to original screenshot
+      - Line, Arrow, Rectangle, Ellipse
+      - Text tool
+  - 10 preset colors + custom color picker
+  - 6 brush sizes (2–24 px)
+  - Undo / Redo (Ctrl+Z / Ctrl+Y, up to 50 steps)
+  - Copy annotated image to clipboard (Ctrl+C)
+  - Save As dialog (Ctrl+S)
+  - New Snip button — capture again without closing the editor
+  - GitHub Releases auto-updater — blue banner appears in the editor when a
+    newer version is available; one-click install and restart
+  - Inno Setup installer — no admin rights required (installs to LocalAppData)
+  - build.bat — one-command PyInstaller + installer + zip packaging
