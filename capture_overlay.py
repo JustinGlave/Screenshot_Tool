@@ -1,7 +1,7 @@
 """Fullscreen translucent overlay for click-drag region selection."""
 
 import tkinter as tk
-from PIL import Image, ImageTk, ImageEnhance, ImageGrab
+from PIL import ImageTk, ImageEnhance, ImageGrab
 
 
 class CaptureOverlay:

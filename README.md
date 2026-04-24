@@ -41,13 +41,12 @@ pip install -r requirements.txt
 python main.py
 ```
 
-The capture overlay opens immediately. Click and drag to select a region, then annotate in the editor.
+The app opens to the home window. Choose Snip Now, 3s Timer, or 5s Timer — or use the global hotkey `Ctrl+Shift+S` from anywhere. After capture, annotate in the editor, then copy or save.
 
 ## Dependencies
 
 | Package | Purpose |
 |---|---|
-| Pillow | Image processing and drawing |
-| mss | Fast multi-monitor screen capture |
-| pynput | Global hotkey listener |
-| pywin32 | Copy to clipboard on Windows |
+| Pillow | Image capture, processing, and drawing |
+| pystray | System tray icon |
+| pywin32 | Clipboard support and Win32 API access |

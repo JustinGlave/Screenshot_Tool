@@ -3,6 +3,14 @@
 ================================================================================
 
 --------------------------------------------------------------------------------
+ v1.2.1 — 2026-04-24
+--------------------------------------------------------------------------------
+  - Code quality: fixed all linter warnings in editor_window.py and
+    capture_overlay.py (narrowed exception clauses, renamed lambda parameters
+    to avoid scope shadowing, replaced positional after() args with lambdas,
+    removed unused PIL Image import)
+
+--------------------------------------------------------------------------------
  v1.0.1 — 2026-04-24
 --------------------------------------------------------------------------------
   - Added app icon (ICO + PNG) to the exe, editor window title bar,

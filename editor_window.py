@@ -1,9 +1,8 @@
 """Annotation editor – draw shapes, freehand, arrows, text on a captured screenshot."""
 
 import tkinter as tk
-from tkinter import colorchooser, filedialog, messagebox
+from tkinter import colorchooser, filedialog
 from PIL import Image, ImageDraw, ImageTk
-import os
 
 
 TOOLS = ["select", "pen", "marker", "eraser", "line", "arrow", "rect", "ellipse", "text"]
@@ -156,7 +155,7 @@ class EditorWindow:
                 font=("Segoe UI", 14), pady=6,
                 activebackground="#007ACC", activeforeground="white",
                 cursor="hand2",
-                command=lambda t=t: self._select_tool(t),
+                command=lambda tool=t: self._select_tool(tool),
             )
             btn.pack(fill="x", pady=1, padx=4)
             self._tool_buttons[t] = btn
@@ -177,7 +176,7 @@ class EditorWindow:
             btn = tk.Button(
                 color_grid, bg=c, width=2, height=1,
                 relief="solid", bd=1, cursor="hand2",
-                command=lambda c=c: self._select_color(c),
+                command=lambda col=c: self._select_color(col),
             )
             btn.grid(row=i // 2, column=i % 2, padx=2, pady=2)
             self._color_btns[c] = btn
@@ -203,7 +202,7 @@ class EditorWindow:
                 size_frame, text=str(s), width=3,
                 bg="#3C3F41", fg="white", relief="flat",
                 font=("Segoe UI", 8), cursor="hand2",
-                command=lambda s=s: self._select_size(s),
+                command=lambda sz=s: self._select_size(sz),
             )
             btn.pack(side="left", padx=1)
             self._size_buttons[s] = btn
@@ -496,7 +495,8 @@ class EditorWindow:
     def _new_snip(self):
         self.root.withdraw()
         # Wait for the window to fully disappear before grabbing the screen
-        self.root.after(300, self._start_new_snip)
+        # noinspection PyTypeChecker
+        self.root.after(300, lambda: self._start_new_snip())
 
     def _start_new_snip(self):
         from capture_overlay import CaptureOverlay
@@ -529,7 +529,7 @@ class EditorWindow:
             info = check_for_update()
             if info:
                 self.root.after(0, self._show_update_banner, info)
-        except Exception:
+        except (ImportError, OSError, RuntimeError):
             pass
 
     def _show_update_banner(self, info):
@@ -558,14 +558,17 @@ class EditorWindow:
                 def progress(done, total):
                     if total:
                         pct = int(done / total * 100)
-                        self.root.after(0, lambda p=pct: self._update_label.configure(
-                            text=f"Downloading update… {p}%"))
+                        label_text = f"Downloading update… {pct}%"
+                        # noinspection PyTypeChecker
+                        self.root.after(0, lambda: self._update_label.configure(text=label_text))
 
                 download_and_apply(self._pending_update, progress_callback=progress)
-            except Exception as e:
-                self.root.after(0, messagebox.showerror, "Update Failed", str(e))
-                # Re-enable button
-                self.root.after(0, self._show_update_banner, self._pending_update)
+            except (OSError, RuntimeError) as e:
+                err_msg = str(e)
+                # noinspection PyTypeChecker
+                self.root.after(0, lambda: messagebox.showerror("Update Failed", err_msg))
+                # noinspection PyTypeChecker
+                self.root.after(0, lambda: self._show_update_banner(self._pending_update))
 
         threading.Thread(target=run, daemon=True).start()
 
