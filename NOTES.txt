@@ -9,6 +9,18 @@
     desktop shortcut, Start Menu entry, and Inno Setup installer wizard
 
 --------------------------------------------------------------------------------
+ v1.1.0 — 2026-04-24
+--------------------------------------------------------------------------------
+  - System tray icon — app stays running in the background after launch;
+    right-click tray for New Snip or Exit
+  - Global hotkey now uses Win32 RegisterHotKey API (more reliable in compiled builds)
+  - Hotkey (Ctrl+Shift+S) works even when app is minimized to tray
+  - Editor window minimizes before capture so it doesn't appear in the screenshot
+  - Tool tooltips — hover over any tool button to see its name
+  - Default window size set to 1100x700 so all tools are visible on open
+  - Minimum window size enforced at 800x550
+
+--------------------------------------------------------------------------------
  v1.0.0 — 2026-04-24
 --------------------------------------------------------------------------------
 Initial release.

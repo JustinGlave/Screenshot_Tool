@@ -6,7 +6,8 @@ A lightweight screenshot and annotation tool for Windows, inspired by the Window
 
 - **Click and drag** to capture any region of the screen
 - **Auto-saves** every capture to `~/Pictures/Screenshots/`
-- **Global hotkey** — `Ctrl+Shift+S` triggers a new snip from anywhere
+- **System tray** — app lives in the tray after launch; right-click for New Snip or Exit
+- **Global hotkey** — `Ctrl+Shift+S` triggers a new snip from anywhere, even when minimized to tray
 - **Annotation tools:**
   - Pen — freehand drawing
   - Marker — semi-transparent highlight
