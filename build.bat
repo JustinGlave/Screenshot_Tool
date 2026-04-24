@@ -30,8 +30,10 @@ pyinstaller ^
     --add-data="screenshot_tool_icon.png;." ^
     --hidden-import=PIL._tkinter_finder ^
     --collect-all=PIL ^
+    --collect-all=pynput ^
     --hidden-import=pynput.keyboard._win32 ^
     --hidden-import=pynput.mouse._win32 ^
+    --hidden-import=pynput._util.win32 ^
     --hidden-import=win32clipboard ^
     main.py
 

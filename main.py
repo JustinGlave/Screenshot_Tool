@@ -6,11 +6,22 @@ Hotkey:  Ctrl+Shift+S  (system-wide, starts a new snip)
 
 import os
 import sys
+import ctypes
 import datetime
 import threading
 from pathlib import Path
 from PIL import Image
 from version import __version__
+
+# Must be called before any UI or screen capture — makes tkinter and
+# ImageGrab agree on pixel coordinates on high-DPI displays.
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
 
 # ── Config ───────────────────────────────────────────────────────────────────
 SAVE_DIR = Path.home() / "Pictures" / "Screenshots"
