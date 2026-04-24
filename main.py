@@ -1,14 +1,16 @@
-"""Screenshot Tool – main entry point.
+"""Screenshot Tool — main entry point.
 
-Launch:  python main.py
-Hotkey:  Ctrl+Shift+S  (system-wide, starts a new snip)
+The app lives in the system tray after first launch.
+Hotkey: Ctrl+Shift+S — triggers a new snip from anywhere.
 """
 
 import os
 import sys
 import ctypes
+import ctypes.wintypes
 import datetime
 import threading
+import queue
 from pathlib import Path
 from PIL import Image
 from version import __version__
@@ -23,14 +25,16 @@ except Exception:
     except Exception:
         pass
 
-# ── Config ───────────────────────────────────────────────────────────────────
+# ── Config ────────────────────────────────────────────────────────────────────
 SAVE_DIR = Path.home() / "Pictures" / "Screenshots"
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
-HOTKEY = "<ctrl>+<shift>+s"
+# ── State ─────────────────────────────────────────────────────────────────────
+_capture_queue = queue.Queue()
+_busy = False
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def auto_save(image: Image.Image, save_dir=None) -> str:
     folder = Path(save_dir) if save_dir else SAVE_DIR
@@ -41,16 +45,18 @@ def auto_save(image: Image.Image, save_dir=None) -> str:
     return str(path)
 
 
-def start_capture(on_capture=None):
-    """Open the fullscreen overlay; call on_capture(image) when done."""
+def trigger_capture():
+    """Queue a capture — ignored if one is already in progress."""
+    if not _busy:
+        _capture_queue.put(True)
+
+
+def start_capture():
     from capture_overlay import CaptureOverlay
 
     def capture_and_open(image):
         path = auto_save(image)
-        if on_capture:
-            on_capture(image, path)
-        else:
-            open_editor(image, path)
+        open_editor(image, path)
 
     CaptureOverlay(capture_and_open)
 
@@ -60,45 +66,86 @@ def open_editor(image: Image.Image, auto_saved_path: str = None):
     EditorWindow(image, str(SAVE_DIR), auto_saved_path)
 
 
-# ── Global hotkey listener ────────────────────────────────────────────────────
+# ── Global hotkey via Win32 RegisterHotKey ────────────────────────────────────
 
-def _setup_hotkey():
+def _hotkey_loop():
+    MOD_CONTROL = 0x0002
+    MOD_SHIFT   = 0x0004
+    VK_S        = 0x53
+    HOTKEY_ID   = 1
+    WM_HOTKEY   = 0x0312
+
+    user32 = ctypes.windll.user32
+    if not user32.RegisterHotKey(None, HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, VK_S):
+        print("Could not register Ctrl+Shift+S — may already be in use by another app.")
+        return
+
+    msg = ctypes.wintypes.MSG()
+    while user32.GetMessageA(ctypes.byref(msg), None, 0, 0) != 0:
+        if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
+            trigger_capture()
+        user32.TranslateMessage(ctypes.byref(msg))
+        user32.DispatchMessageA(ctypes.byref(msg))
+
+    user32.UnregisterHotKey(None, HOTKEY_ID)
+
+
+# ── System tray ───────────────────────────────────────────────────────────────
+
+def _setup_tray():
     try:
-        from pynput import keyboard
+        import pystray
 
-        combo = {keyboard.Key.ctrl, keyboard.Key.shift, keyboard.KeyCode.from_char("s")}
-        current = set()
+        _base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        icon_path = os.path.join(_base, "screenshot_tool_icon.png")
+        icon_image = Image.open(icon_path)
 
-        def on_press(key):
-            current.add(key)
-            if all(k in current for k in combo):
-                threading.Thread(target=start_capture, daemon=True).start()
+        def on_snip(icon, item):
+            trigger_capture()
 
-        def on_release(key):
-            current.discard(key)
+        def on_exit(icon, item):
+            icon.stop()
+            os._exit(0)
 
-        listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-        listener.daemon = True
-        listener.start()
-        return listener
+        menu = pystray.Menu(
+            pystray.MenuItem(f"New Snip  (Ctrl+Shift+S)", on_snip, default=True),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Exit", on_exit),
+        )
+        icon = pystray.Icon(
+            "ScreenshotTool", icon_image,
+            f"Screenshot Tool v{__version__}", menu
+        )
+        icon.run()
     except Exception as e:
-        print(f"Hotkey setup failed: {e}")
-        return None
+        print(f"Tray setup failed: {e}")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
-    print(f"Screenshot Tool started")
+    print(f"Screenshot Tool v{__version__} started")
     print(f"Save folder : {SAVE_DIR}")
     print(f"Hotkey      : Ctrl+Shift+S")
-    print(f"Starting capture overlay…\n")
 
-    # Start hotkey listener in background
-    _setup_hotkey()
+    # Hotkey listener — Win32 message pump on background thread
+    threading.Thread(target=_hotkey_loop, daemon=True).start()
 
-    # Launch first snip immediately
-    start_capture()
+    # System tray — keeps the app alive in the background
+    threading.Thread(target=_setup_tray, daemon=True).start()
+
+    # Trigger the first capture immediately on launch
+    trigger_capture()
+
+    # Main loop — wait for capture triggers from hotkey or tray
+    global _busy
+    while True:
+        _capture_queue.get()
+        _busy = True
+        try:
+            start_capture()
+        finally:
+            _busy = False
 
 
 if __name__ == "__main__":
