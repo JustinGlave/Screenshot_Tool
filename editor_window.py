@@ -36,10 +36,16 @@ class EditorWindow:
         self._text_entry = None
 
         from version import __version__
+        import sys, os
         self.root = tk.Tk()
         self.root.title(f"Screenshot Tool v{__version__}")
         self.root.configure(bg="#2B2B2B")
         self.root.resizable(True, True)
+        # Set window icon (works from both source and compiled build)
+        _base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        _ico = os.path.join(_base, "screenshot_tool_icon.ico")
+        if os.path.exists(_ico):
+            self.root.iconbitmap(_ico)
 
         self._build_ui()
         self._push_history()

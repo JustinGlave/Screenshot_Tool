@@ -21,6 +21,8 @@ DisableProgramGroupPage=yes
 ; Output
 OutputDir=dist
 OutputBaseFilename=ScreenshotToolSetup
+SetupIconFile=screenshot_tool_icon.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
 
 ; No admin required
@@ -42,8 +44,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "dist\ScreenshotTool\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{userdesktop}\{#MyAppName}";   Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\{#MyAppName}";         Filename: "{app}\{#MyAppExeName}"
+Name: "{userdesktop}\{#MyAppName}";     Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName}";           Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 
 [Run]

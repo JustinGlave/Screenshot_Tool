@@ -21,6 +21,9 @@ pyinstaller ^
     --onedir ^
     --windowed ^
     --name=ScreenshotTool ^
+    --icon=screenshot_tool_icon.ico ^
+    --add-data="screenshot_tool_icon.ico;." ^
+    --add-data="screenshot_tool_icon.png;." ^
     --hidden-import=PIL._tkinter_finder ^
     --collect-all=PIL ^
     --hidden-import=pynput.keyboard._win32 ^
