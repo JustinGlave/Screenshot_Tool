@@ -35,14 +35,16 @@ class EditorWindow:
         self._preview_id = None
         self._text_entry = None
 
+        from version import __version__
         self.root = tk.Tk()
-        self.root.title("Screenshot Editor")
+        self.root.title(f"Screenshot Tool v{__version__}")
         self.root.configure(bg="#2B2B2B")
         self.root.resizable(True, True)
 
         self._build_ui()
         self._push_history()
         self._refresh_canvas()
+        self._start_update_check()
 
         self.root.mainloop()
 
@@ -207,6 +209,28 @@ class EditorWindow:
         self.root.bind("<Control-c>", lambda e: self._copy_to_clipboard())
         self.root.bind("<Control-s>", lambda e: self._save_as())
         self._select_tool("pen")
+
+        # Update banner (hidden until an update is found)
+        self._update_banner = tk.Frame(self.root, bg="#007ACC", pady=4)
+        self._update_label = tk.Label(
+            self._update_banner, text="", bg="#007ACC", fg="white",
+            font=("Segoe UI", 9),
+        )
+        self._update_label.pack(side="left", padx=10)
+        tk.Button(
+            self._update_banner, text="Install & Restart",
+            bg="#005A9E", fg="white", relief="flat",
+            font=("Segoe UI", 9, "bold"), padx=8, cursor="hand2",
+            activebackground="#004A8A", activeforeground="white",
+            command=self._apply_update,
+        ).pack(side="left", padx=4)
+        tk.Button(
+            self._update_banner, text="✕", bg="#007ACC", fg="white",
+            relief="flat", font=("Segoe UI", 9), cursor="hand2",
+            activebackground="#0060AA", activeforeground="white",
+            command=lambda: self._update_banner.pack_forget(),
+        ).pack(side="right", padx=6)
+        self._pending_update = None
 
     # ── Tool / color / size selection ────────────────────────────────────────
 
@@ -434,6 +458,38 @@ class EditorWindow:
         self._refresh_canvas()
         self.auto_saved_path = path
         self._status_var.set(f"Auto-saved: {path}")
+
+    # ── Auto-update ───────────────────────────────────────────────────────────
+
+    def _start_update_check(self):
+        import threading
+        threading.Thread(target=self._bg_update_check, daemon=True).start()
+
+    def _bg_update_check(self):
+        try:
+            from updater import check_for_update
+            info = check_for_update()
+            if info:
+                self.root.after(0, self._show_update_banner, info)
+        except Exception:
+            pass
+
+    def _show_update_banner(self, info):
+        self._pending_update = info
+        self._update_label.configure(
+            text=f"Update available: v{info.current_version} → v{info.latest_version}"
+        )
+        self._update_banner.pack(fill="x", before=self.canvas.master)
+
+    def _apply_update(self):
+        if not self._pending_update:
+            return
+        from tkinter import messagebox
+        try:
+            from updater import download_and_apply
+            download_and_apply(self._pending_update)
+        except RuntimeError as e:
+            messagebox.showerror("Update Failed", str(e))
 
     def _copy_to_clipboard(self):
         import win32clipboard
