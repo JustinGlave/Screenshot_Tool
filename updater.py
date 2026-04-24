@@ -211,4 +211,4 @@ del "%~f0"
         creationflags=subprocess.CREATE_NO_WINDOW,
         close_fds=True,
     )
-    sys.exit(0)
+    os._exit(0)  # hard exit — kills all threads so the bat script can replace the exe
