@@ -20,10 +20,10 @@ from version import __version__
 # ImageGrab agree on pixel coordinates on high-DPI displays.
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(2)  # type: ignore[attr-defined]
-except Exception:  # noqa: BLE001
+except (AttributeError, OSError):
     try:
         ctypes.windll.user32.SetProcessDPIAware()  # type: ignore[attr-defined]
-    except Exception:  # noqa: BLE001
+    except (AttributeError, OSError):
         pass
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -71,18 +71,18 @@ def _hotkey_loop(tk_root):
     wm_hotkey   = 0x0312
 
     user32 = ctypes.windll.user32  # type: ignore[attr-defined]
-    if not user32.RegisterHotKey(None, hotkey_id, mod_control | mod_shift, vk_s):
+    if not user32.RegisterHotKey(None, hotkey_id, mod_control | mod_shift, vk_s):  # type: ignore[attr-defined]
         print("Could not register Ctrl+Shift+S — may already be in use by another app.")
         return
 
     msg = ctypes.wintypes.MSG()
-    while user32.GetMessageA(ctypes.byref(msg), None, 0, 0) != 0:
+    while user32.GetMessageA(ctypes.byref(msg), None, 0, 0) != 0:  # type: ignore[attr-defined]
         if msg.message == wm_hotkey and msg.wParam == hotkey_id:
             tk_root.after(0, _hotkey_snip)
-        user32.TranslateMessage(ctypes.byref(msg))
-        user32.DispatchMessageA(ctypes.byref(msg))
+        user32.TranslateMessage(ctypes.byref(msg))  # type: ignore[attr-defined]
+        user32.DispatchMessageA(ctypes.byref(msg))  # type: ignore[attr-defined]
 
-    user32.UnregisterHotKey(None, hotkey_id)
+    user32.UnregisterHotKey(None, hotkey_id)  # type: ignore[attr-defined]
 
 
 def _hotkey_snip():
