@@ -16,6 +16,10 @@ echo ============================================================
 echo.
 
 :: ── Step 1: PyInstaller ──────────────────────────────────────
+echo [1/3] Cleaning previous build...
+if exist build rmdir /s /q build
+if exist dist rmdir /s /q dist
+
 echo [1/3] Running PyInstaller...
 pyinstaller ^
     --onedir ^
@@ -26,6 +30,10 @@ pyinstaller ^
     --add-data="screenshot_tool_icon.png;." ^
     --hidden-import=PIL._tkinter_finder ^
     --collect-all=PIL ^
+    --hidden-import=mss ^
+    --hidden-import=mss.windows ^
+    --hidden-import=mss.base ^
+    --hidden-import=mss.tools ^
     --collect-all=mss ^
     --hidden-import=pynput.keyboard._win32 ^
     --hidden-import=pynput.mouse._win32 ^
