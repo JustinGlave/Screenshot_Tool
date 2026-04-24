@@ -2,6 +2,7 @@
 
 The app lives in the system tray after first launch.
 Hotkey: Ctrl+Shift+S — triggers a new snip from anywhere.
+Only one instance is allowed at a time.
 """
 
 import os
@@ -32,9 +33,30 @@ SAVE_DIR.mkdir(parents=True, exist_ok=True)
 # ── State ─────────────────────────────────────────────────────────────────────
 _capture_queue = queue.Queue()
 _busy = False
+_mutex_handle = None  # kept alive for the lifetime of the process
+
+
+# ── Single instance enforcement ───────────────────────────────────────────────
+
+def _acquire_single_instance():
+    """
+    Create a named Windows mutex. Returns True if this is the first instance,
+    False if another instance is already running.
+    """
+    global _mutex_handle
+    ERROR_ALREADY_EXISTS = 183
+    _mutex_handle = ctypes.windll.kernel32.CreateMutexW(
+        None, False, "ScreenshotTool_SingleInstance_Mutex"
+    )
+    return ctypes.windll.kernel32.GetLastError() != ERROR_ALREADY_EXISTS
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _icon_path():
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, "screenshot_tool_icon.png")
+
 
 def auto_save(image: Image.Image, save_dir=None) -> str:
     folder = Path(save_dir) if save_dir else SAVE_DIR
@@ -96,9 +118,12 @@ def _setup_tray():
     try:
         import pystray
 
-        _base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-        icon_path = os.path.join(_base, "screenshot_tool_icon.png")
-        icon_image = Image.open(icon_path)
+        png = _icon_path()
+        if os.path.exists(png):
+            icon_image = Image.open(png).convert("RGBA")
+        else:
+            # Fallback: plain coloured square so the tray entry is always visible
+            icon_image = Image.new("RGBA", (64, 64), "#1E88E5")
 
         def on_snip(icon, item):
             trigger_capture()
@@ -108,13 +133,15 @@ def _setup_tray():
             os._exit(0)
 
         menu = pystray.Menu(
-            pystray.MenuItem(f"New Snip  (Ctrl+Shift+S)", on_snip, default=True),
+            pystray.MenuItem("New Snip  (Ctrl+Shift+S)", on_snip, default=True),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Exit", on_exit),
         )
         icon = pystray.Icon(
-            "ScreenshotTool", icon_image,
-            f"Screenshot Tool v{__version__}", menu
+            "ScreenshotTool",
+            icon_image,
+            f"Screenshot Tool v{__version__}",
+            menu,
         )
         icon.run()
     except Exception as e:
@@ -124,6 +151,15 @@ def _setup_tray():
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
+    if not _acquire_single_instance():
+        ctypes.windll.user32.MessageBoxW(
+            None,
+            "Screenshot Tool is already running.\n\nCheck the system tray.",
+            "Screenshot Tool",
+            0x40,  # MB_ICONINFORMATION
+        )
+        sys.exit(0)
+
     print(f"Screenshot Tool v{__version__} started")
     print(f"Save folder : {SAVE_DIR}")
     print(f"Hotkey      : Ctrl+Shift+S")
