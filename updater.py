@@ -166,12 +166,33 @@ def download_and_apply(info: UpdateInfo, progress_callback=None) -> None:
         tmp_zip.unlink(missing_ok=True)
         raise RuntimeError(f"Download failed: {exc}") from exc
 
-    pid = os.getpid()
-    bat_fd, bat_path_str = tempfile.mkstemp(suffix=".bat")
-    bat_path = Path(bat_path_str)
+    pid      = os.getpid()
     exe_str  = str(current_exe)
     zip_str  = str(tmp_zip)
 
+    # Write PowerShell script to a temp file to avoid quoting issues with spaces in paths
+    ps_fd, ps_path_str = tempfile.mkstemp(suffix=".ps1")
+    ps_path = Path(ps_path_str)
+    ps_content = f"""
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zipPath = '{zip_str.replace("'", "''")}'
+$exePath = '{exe_str.replace("'", "''")}'
+$zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+$entry = $zip.Entries | Where-Object {{ $_.Name -eq 'ScreenshotTool.exe' }} | Select-Object -First 1
+if ($entry) {{
+    [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $exePath, $true)
+}}
+$zip.Dispose()
+Remove-Item $zipPath -ErrorAction SilentlyContinue
+Start-Process $exePath
+Remove-Item '{ps_path_str.replace("'", "''")}' -ErrorAction SilentlyContinue
+"""
+    with open(ps_fd, "w", encoding="utf-8") as fh:
+        fh.write(ps_content)
+
+    # Batch script waits for this process to exit, then runs the PowerShell
+    bat_fd, bat_path_str = tempfile.mkstemp(suffix=".bat")
+    bat_path = Path(bat_path_str)
     bat_content = f"""@echo off
 :wait
 tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul
@@ -179,9 +200,7 @@ if not errorlevel 1 (
     timeout /t 1 /nobreak >nul
     goto wait
 )
-powershell -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $zip = [System.IO.Compression.ZipFile]::OpenRead('{zip_str}'); $entry = $zip.Entries | Where-Object {{ $_.Name -eq 'ScreenshotTool.exe' }} | Select-Object -First 1; if ($entry) {{ [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, '{exe_str}', $true) }}; $zip.Dispose()"
-del "{zip_str}"
-start "" "{exe_str}"
+powershell -ExecutionPolicy Bypass -File "{ps_path_str}"
 del "%~f0"
 """
     with open(bat_fd, "w") as fh:

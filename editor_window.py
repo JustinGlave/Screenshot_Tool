@@ -534,12 +534,32 @@ class EditorWindow:
     def _apply_update(self):
         if not self._pending_update:
             return
+        import threading
         from tkinter import messagebox
-        try:
-            from updater import download_and_apply
-            download_and_apply(self._pending_update)
-        except RuntimeError as e:
-            messagebox.showerror("Update Failed", str(e))
+
+        # Disable button and show progress in the banner label
+        for w in self._update_banner.winfo_children():
+            if isinstance(w, tk.Button) and "Install" in w.cget("text"):
+                w.configure(state="disabled", text="Downloading…")
+                break
+
+        def run():
+            try:
+                from updater import download_and_apply
+
+                def progress(done, total):
+                    if total:
+                        pct = int(done / total * 100)
+                        self.root.after(0, self._update_label.configure,
+                                        {"text": f"Downloading update… {pct}%"})
+
+                download_and_apply(self._pending_update, progress_callback=progress)
+            except Exception as e:
+                self.root.after(0, messagebox.showerror, "Update Failed", str(e))
+                # Re-enable button
+                self.root.after(0, self._show_update_banner, self._pending_update)
+
+        threading.Thread(target=run, daemon=True).start()
 
     def _copy_to_clipboard(self):
         import win32clipboard
