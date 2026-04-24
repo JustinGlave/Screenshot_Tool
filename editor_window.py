@@ -8,6 +8,43 @@ import io, os, datetime
 
 
 TOOLS = ["select", "pen", "marker", "eraser", "line", "arrow", "rect", "ellipse", "text"]
+TOOL_NAMES = {
+    "select": "Select",
+    "pen": "Pen",
+    "marker": "Marker",
+    "eraser": "Eraser",
+    "line": "Line",
+    "arrow": "Arrow",
+    "rect": "Rectangle",
+    "ellipse": "Ellipse",
+    "text": "Text",
+}
+
+
+class _ToolTip:
+    def __init__(self, widget, text):
+        self._tip = None
+        widget.bind("<Enter>", lambda e: self._show(widget, text))
+        widget.bind("<Leave>", lambda e: self._hide())
+
+    def _show(self, widget, text):
+        x = widget.winfo_rootx() + widget.winfo_width() + 6
+        y = widget.winfo_rooty() + (widget.winfo_height() // 2) - 10
+        self._tip = tk.Toplevel(widget)
+        self._tip.overrideredirect(True)
+        self._tip.attributes("-topmost", True)
+        self._tip.geometry(f"+{x}+{y}")
+        tk.Label(
+            self._tip, text=text,
+            bg="#FFFFCC", fg="#1A1A1A",
+            font=("Segoe UI", 9),
+            relief="solid", bd=1, padx=5, pady=3,
+        ).pack()
+
+    def _hide(self):
+        if self._tip:
+            self._tip.destroy()
+            self._tip = None
 COLORS = ["#E53935", "#FF9800", "#FFEB3B", "#43A047", "#1E88E5", "#8E24AA",
           "#000000", "#FFFFFF", "#BDBDBD", "#795548"]
 SIZES = [2, 4, 6, 10, 16, 24]
@@ -41,6 +78,8 @@ class EditorWindow:
         self.root.title(f"Screenshot Tool v{__version__}")
         self.root.configure(bg="#2B2B2B")
         self.root.resizable(True, True)
+        self.root.geometry("1100x700")
+        self.root.minsize(800, 550)
         # Set window icon (works from both source and compiled build)
         _base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
         _ico = os.path.join(_base, "screenshot_tool_icon.ico")
@@ -112,6 +151,7 @@ class EditorWindow:
             )
             btn.pack(fill="x", pady=1, padx=4)
             self._tool_buttons[t] = btn
+            _ToolTip(btn, TOOL_NAMES[t])
 
         # ── Right properties panel ──
         prop_panel = tk.Frame(self.root, bg="#252526", width=160)
@@ -449,6 +489,10 @@ class EditorWindow:
 
     def _new_snip(self):
         self.root.withdraw()
+        # Wait for the window to fully disappear before grabbing the screen
+        self.root.after(300, self._start_new_snip)
+
+    def _start_new_snip(self):
         from capture_overlay import CaptureOverlay
         CaptureOverlay(self._on_new_capture, root=self.root)
 
