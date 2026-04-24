@@ -34,6 +34,10 @@ pyinstaller ^
     --collect-all=PIL ^
     --collect-all=pystray ^
     --hidden-import=pystray._win32 ^
+    --hidden-import=win32api ^
+    --hidden-import=win32con ^
+    --hidden-import=win32gui ^
+    --hidden-import=win32gui_struct ^
     --hidden-import=win32clipboard ^
     main.py
 

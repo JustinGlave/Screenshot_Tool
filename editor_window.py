@@ -2,9 +2,8 @@
 
 import tkinter as tk
 from tkinter import colorchooser, filedialog, messagebox
-import tkinter.font as tkfont
 from PIL import Image, ImageDraw, ImageTk
-import io, os, datetime
+import os
 
 
 TOOLS = ["select", "pen", "marker", "eraser", "line", "arrow", "rect", "ellipse", "text"]
@@ -337,10 +336,6 @@ class EditorWindow:
         if self.tool in ("pen", "eraser"):
             if self.tool == "eraser" and self._erase_to_original:
                 r = self.size
-                x1, y1 = int(min(self._last_x, x)) - r, int(min(self._last_y, y)) - r
-                x2, y2 = int(max(self._last_x, x)) + r, int(max(self._last_y, y)) + r
-                x1, y1 = max(0, x1), max(0, y1)
-                x2, y2 = min(self.original.width, x2), min(self.original.height, y2)
                 # Create a circular mask for the stroke area
                 mask = Image.new("L", self.original.size, 0)
                 mask_draw = ImageDraw.Draw(mask)
@@ -419,7 +414,8 @@ class EditorWindow:
         self._push_history()
         self._refresh_canvas()
 
-    def _draw_arrow_pil(self, draw, x1, y1, x2, y2, color, w):
+    @staticmethod
+    def _draw_arrow_pil(draw, x1, y1, x2, y2, color, w):
         import math
         draw.line([x1, y1, x2, y2], fill=color, width=w)
         angle = math.atan2(y2 - y1, x2 - x1)
@@ -562,8 +558,8 @@ class EditorWindow:
                 def progress(done, total):
                     if total:
                         pct = int(done / total * 100)
-                        self.root.after(0, self._update_label.configure,
-                                        {"text": f"Downloading update… {pct}%"})
+                        self.root.after(0, lambda p=pct: self._update_label.configure(
+                            text=f"Downloading update… {p}%"))
 
                 download_and_apply(self._pending_update, progress_callback=progress)
             except Exception as e:
@@ -602,4 +598,4 @@ class EditorWindow:
     def _hex_to_rgba(hex_color: str, alpha: int) -> tuple:
         hex_color = hex_color.lstrip("#")
         r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
-        return (r, g, b, alpha)
+        return r, g, b, alpha
