@@ -25,6 +25,8 @@ pyinstaller ^
     --onedir ^
     --windowed ^
     --name=ScreenshotTool ^
+    --add-data="main_window.py;." ^
+    --add-data="config.py;." ^
     --icon=screenshot_tool_icon.ico ^
     --add-data="screenshot_tool_icon.ico;." ^
     --add-data="screenshot_tool_icon.png;." ^

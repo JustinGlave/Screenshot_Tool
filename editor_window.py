@@ -51,7 +51,8 @@ SIZES = [2, 4, 6, 10, 16, 24]
 
 
 class EditorWindow:
-    def __init__(self, image: Image.Image, save_dir: str, auto_saved_path: str | None = None):
+    def __init__(self, image: Image.Image, save_dir: str,
+                 auto_saved_path: str | None = None, tk_root: tk.Tk | None = None):
         self.original = image.copy()
         self.capture = image.copy()  # untouched original for "erase to original"
         self.save_dir = save_dir
@@ -74,13 +75,19 @@ class EditorWindow:
 
         from version import __version__
         import sys, os
-        self.root = tk.Tk()
+        self._tk_root = tk_root  # persistent root when called from main window
+        _owns_root = tk_root is None
+
+        if _owns_root:
+            self.root = tk.Tk()
+        else:
+            self.root = tk.Toplevel(tk_root)
+
         self.root.title(f"Screenshot Tool v{__version__}")
         self.root.configure(bg="#2B2B2B")
         self.root.resizable(True, True)
         self.root.geometry("1100x700")
         self.root.minsize(800, 550)
-        # Set window icon (works from both source and compiled build)
         _base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
         _ico = os.path.join(_base, "screenshot_tool_icon.ico")
         if os.path.exists(_ico):
@@ -91,7 +98,10 @@ class EditorWindow:
         self._refresh_canvas()
         self._start_update_check()
 
-        self.root.mainloop()
+        if _owns_root:
+            self.root.mainloop()
+        else:
+            tk_root.wait_window(self.root)
 
     # ── UI construction ──────────────────────────────────────────────────────
 
@@ -494,7 +504,9 @@ class EditorWindow:
 
     def _start_new_snip(self):
         from capture_overlay import CaptureOverlay
-        CaptureOverlay(self._on_new_capture, root=self.root)
+        # Use the persistent tk root when available so the overlay is a proper Toplevel
+        overlay_root = self._tk_root if self._tk_root else self.root
+        CaptureOverlay(self._on_new_capture, root=overlay_root)
 
     def _on_new_capture(self, image):
         from main import auto_save

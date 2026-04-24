@@ -1,6 +1,7 @@
 """Screenshot Tool — main entry point.
 
-The app lives in the system tray after first launch.
+The app opens to the home window on launch.
+The home window stays in the system tray when closed.
 Hotkey: Ctrl+Shift+S — triggers a new snip from anywhere.
 Only one instance is allowed at a time.
 """
@@ -11,7 +12,6 @@ import ctypes
 import ctypes.wintypes
 import datetime
 import threading
-import queue
 from pathlib import Path
 from PIL import Image
 from version import __version__
@@ -31,18 +31,12 @@ SAVE_DIR = Path.home() / "Pictures" / "Screenshots"
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── State ─────────────────────────────────────────────────────────────────────
-_capture_queue = queue.Queue()
-_busy = False
-_mutex_handle = None  # kept alive for the lifetime of the process
+_mutex_handle = None  # keeps single-instance mutex alive
 
 
-# ── Single instance enforcement ───────────────────────────────────────────────
+# ── Single instance ───────────────────────────────────────────────────────────
 
-def _acquire_single_instance():
-    """
-    Create a named Windows mutex. Returns True if this is the first instance,
-    False if another instance is already running.
-    """
+def _acquire_single_instance() -> bool:
     global _mutex_handle
     ERROR_ALREADY_EXISTS = 183
     _mutex_handle = ctypes.windll.kernel32.CreateMutexW(
@@ -53,7 +47,7 @@ def _acquire_single_instance():
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _icon_path():
+def _icon_path() -> str:
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, "screenshot_tool_icon.png")
 
@@ -67,30 +61,9 @@ def auto_save(image: Image.Image, save_dir=None) -> str:
     return str(path)
 
 
-def trigger_capture():
-    """Queue a capture — ignored if one is already in progress."""
-    if not _busy:
-        _capture_queue.put(True)
-
-
-def start_capture():
-    from capture_overlay import CaptureOverlay
-
-    def capture_and_open(image):
-        path = auto_save(image)
-        open_editor(image, path)
-
-    CaptureOverlay(capture_and_open)
-
-
-def open_editor(image: Image.Image, auto_saved_path: str = None):
-    from editor_window import EditorWindow
-    EditorWindow(image, str(SAVE_DIR), auto_saved_path)
-
-
 # ── Global hotkey via Win32 RegisterHotKey ────────────────────────────────────
 
-def _hotkey_loop():
+def _hotkey_loop(tk_root):
     MOD_CONTROL = 0x0002
     MOD_SHIFT   = 0x0004
     VK_S        = 0x53
@@ -105,16 +78,24 @@ def _hotkey_loop():
     msg = ctypes.wintypes.MSG()
     while user32.GetMessageA(ctypes.byref(msg), None, 0, 0) != 0:
         if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
-            trigger_capture()
+            # Trigger snip on the main thread via tk_root.after()
+            tk_root.after(0, _hotkey_snip)
         user32.TranslateMessage(ctypes.byref(msg))
         user32.DispatchMessageA(ctypes.byref(msg))
 
     user32.UnregisterHotKey(None, HOTKEY_ID)
 
 
+def _hotkey_snip():
+    from main_window import get_instance
+    mw = get_instance()
+    if mw:
+        mw.start_snip(delay=0)
+
+
 # ── System tray ───────────────────────────────────────────────────────────────
 
-def _setup_tray():
+def _setup_tray(tk_root):
     try:
         import pystray
 
@@ -122,26 +103,30 @@ def _setup_tray():
         if os.path.exists(png):
             icon_image = Image.open(png).convert("RGBA")
         else:
-            # Fallback: plain coloured square so the tray entry is always visible
             icon_image = Image.new("RGBA", (64, 64), "#1E88E5")
 
+        def on_open(icon, item):
+            from main_window import get_instance
+            mw = get_instance()
+            if mw:
+                tk_root.after(0, mw.show)
+
         def on_snip(icon, item):
-            trigger_capture()
+            tk_root.after(0, _hotkey_snip)
 
         def on_exit(icon, item):
             icon.stop()
             os._exit(0)
 
         menu = pystray.Menu(
-            pystray.MenuItem("New Snip  (Ctrl+Shift+S)", on_snip, default=True),
+            pystray.MenuItem("Open", on_open, default=True),
+            pystray.MenuItem("New Snip  (Ctrl+Shift+S)", on_snip),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Exit", on_exit),
         )
         icon = pystray.Icon(
-            "ScreenshotTool",
-            icon_image,
-            f"Screenshot Tool v{__version__}",
-            menu,
+            "ScreenshotTool", icon_image,
+            f"Screenshot Tool v{__version__}", menu,
         )
         icon.run()
     except Exception as e:
@@ -164,24 +149,27 @@ def main():
     print(f"Save folder : {SAVE_DIR}")
     print(f"Hotkey      : Ctrl+Shift+S")
 
-    # Hotkey listener — Win32 message pump on background thread
-    threading.Thread(target=_hotkey_loop, daemon=True).start()
+    import tkinter as tk
+    tk_root = tk.Tk()
+    tk_root.withdraw()
 
-    # System tray — keeps the app alive in the background
-    threading.Thread(target=_setup_tray, daemon=True).start()
+    # Set icon on the hidden root so Toplevel windows inherit it
+    _base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    _ico = os.path.join(_base, "screenshot_tool_icon.ico")
+    if os.path.exists(_ico):
+        tk_root.iconbitmap(_ico)
 
-    # Trigger the first capture immediately on launch
-    trigger_capture()
+    # Hotkey listener on background thread
+    threading.Thread(target=_hotkey_loop, args=(tk_root,), daemon=True).start()
 
-    # Main loop — wait for capture triggers from hotkey or tray
-    global _busy
-    while True:
-        _capture_queue.get()
-        _busy = True
-        try:
-            start_capture()
-        finally:
-            _busy = False
+    # System tray on background thread
+    threading.Thread(target=_setup_tray, args=(tk_root,), daemon=True).start()
+
+    # Show the home window
+    from main_window import MainWindow
+    MainWindow(tk_root, str(SAVE_DIR))
+
+    tk_root.mainloop()
 
 
 if __name__ == "__main__":
