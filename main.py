@@ -100,7 +100,7 @@ def _setup_tray(tk_root):
 
         png = _icon_path()
         if os.path.exists(png):
-            icon_image = Image.open(png).convert("RGBA")
+            icon_image = Image.open(png).convert("RGBA").resize((64, 64), Image.LANCZOS)
         else:
             icon_image = Image.new("RGBA", (64, 64), "#1E88E5")
 

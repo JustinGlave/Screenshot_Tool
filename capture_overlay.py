@@ -5,13 +5,14 @@ from PIL import ImageTk, ImageEnhance, ImageGrab
 
 
 class CaptureOverlay:
-    def __init__(self, on_capture, root=None):
+    def __init__(self, on_capture, on_cancel=None, root=None):
         """
         on_capture(image): called with the cropped PIL image on success.
         root: pass an existing Tk root to reuse its mainloop (e.g. from the editor).
               If None, a new Tk root is created and mainloop is started here.
         """
         self.on_capture = on_capture
+        self.on_cancel = on_cancel
         self.start_x = self.start_y = 0
         self.rect_id = None
         self._bright_photo = None
@@ -102,13 +103,13 @@ class CaptureOverlay:
         if x2 - x1 >= 5 and y2 - y1 >= 5:
             region = self.bg_image_pil.crop((x1, y1, x2, y2))
             self.on_capture(region)
-        elif not self._owns_root:
-            self.root.deiconify()
+        elif self.on_cancel:
+            self.on_cancel()
 
     def _cancel(self):
         self._close_overlay()
-        if not self._owns_root:
-            self.root.deiconify()
+        if self.on_cancel:
+            self.on_cancel()
 
     def _close_overlay(self):
         self.overlay.destroy()

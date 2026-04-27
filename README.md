@@ -21,7 +21,8 @@ A lightweight screenshot and annotation tool for Windows, inspired by the Window
 - **6 brush sizes** + opacity slider for the marker
 - **Undo / Redo** (Ctrl+Z / Ctrl+Y, up to 50 steps)
 - **Copy to clipboard** (Ctrl+C)
-- **Save As** dialog (Ctrl+S)
+- **Copy Path** — copies the saved file path to the clipboard with one click
+- **Save As** dialog (Ctrl+S) — replaces the auto-saved file; no duplicate left behind
 - **New Snip** button to capture again without reopening
 
 ## Requirements

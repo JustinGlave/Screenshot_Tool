@@ -1,5 +1,6 @@
 """Annotation editor – draw shapes, freehand, arrows, text on a captured screenshot."""
 
+import os
 import tkinter as tk
 from tkinter import colorchooser, filedialog
 from PIL import Image, ImageDraw, ImageTk
@@ -115,6 +116,7 @@ class EditorWindow:
             ("Redo", self._redo),
             ("Copy", self._copy_to_clipboard),
             ("Save As…", self._save_as),
+            ("Copy Path", self._copy_path),
         ]:
             tk.Button(
                 toolbar, text=label, command=cmd,
@@ -502,7 +504,7 @@ class EditorWindow:
         from capture_overlay import CaptureOverlay
         # Use the persistent tk root when available so the overlay is a proper Toplevel
         overlay_root = self._tk_root if self._tk_root else self.root
-        CaptureOverlay(self._on_new_capture, root=overlay_root)
+        CaptureOverlay(self._on_new_capture, on_cancel=self.root.deiconify, root=overlay_root)
 
     def _on_new_capture(self, image):
         from main import auto_save
@@ -585,6 +587,17 @@ class EditorWindow:
         win32clipboard.CloseClipboard()
         self._status_var.set("Copied to clipboard")
 
+    def _copy_path(self):
+        if not self.auto_saved_path:
+            self._status_var.set("No saved path to copy")
+            return
+        import win32clipboard
+        win32clipboard.OpenClipboard()
+        win32clipboard.EmptyClipboard()
+        win32clipboard.SetClipboardText(self.auto_saved_path, win32clipboard.CF_UNICODETEXT)
+        win32clipboard.CloseClipboard()
+        self._status_var.set(f"Path copied: {self.auto_saved_path}")
+
     def _save_as(self):
         path = filedialog.asksaveasfilename(
             defaultextension=".png",
@@ -593,6 +606,11 @@ class EditorWindow:
         )
         if path:
             self.original.convert("RGB").save(path)
+            if (self.auto_saved_path
+                    and os.path.exists(self.auto_saved_path)
+                    and os.path.abspath(self.auto_saved_path) != os.path.abspath(path)):
+                os.remove(self.auto_saved_path)
+            self.auto_saved_path = path
             self._status_var.set(f"Saved: {path}")
 
     # ── Helpers ───────────────────────────────────────────────────────────────

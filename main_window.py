@@ -165,7 +165,7 @@ class MainWindow:
 
     def _do_snip(self):
         from capture_overlay import CaptureOverlay
-        CaptureOverlay(self._on_capture, root=self._tk_root)
+        CaptureOverlay(self._on_capture, on_cancel=self.show, root=self._tk_root)
 
     def _on_capture(self, image):
         from main import auto_save
