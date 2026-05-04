@@ -2,8 +2,15 @@
 
 import os
 import tkinter as tk
-from tkinter import colorchooser, filedialog
-from PIL import Image, ImageDraw, ImageTk
+from tkinter import colorchooser, filedialog, messagebox
+from PIL import Image, ImageDraw, ImageFont, ImageTk
+
+
+_editor_instance = None
+
+
+def get_editor_instance():
+    return _editor_instance
 
 
 TOOLS = ["select", "pen", "marker", "eraser", "line", "arrow", "rect", "ellipse", "text"]
@@ -51,11 +58,13 @@ SIZES = [2, 4, 6, 10, 16, 24]
 
 class EditorWindow:
     def __init__(self, image: Image.Image, save_dir: str,
-                 auto_saved_path: str | None = None, tk_root: tk.Tk | None = None):
+                 auto_saved_path: str | None = None, tk_root: tk.Tk | None = None,
+                 clipboard_copied: bool = False):
         self.original = image.copy()
         self.capture = image.copy()  # untouched original for "erase to original"
         self.save_dir = save_dir
         self.auto_saved_path = auto_saved_path
+        self._clipboard_copied = clipboard_copied
 
         # drawing state
         self.tool = "pen"
@@ -71,9 +80,10 @@ class EditorWindow:
         self._shape_start = (0, 0)
         self._preview_id = None
         self._text_entry = None
+        self._text_window = None
 
         from version import __version__
-        import sys, os
+        import sys
         self._tk_root = tk_root  # persistent root when called from main window
         _owns_root = tk_root is None
 
@@ -92,6 +102,9 @@ class EditorWindow:
         if os.path.exists(_ico):
             self.root.iconbitmap(_ico)
 
+        global _editor_instance
+        _editor_instance = self
+
         self._build_ui()
         self._push_history()
         self._refresh_canvas()
@@ -101,6 +114,9 @@ class EditorWindow:
             self.root.mainloop()
         else:
             tk_root.wait_window(self.root)
+
+        if _editor_instance is self:
+            _editor_instance = None
 
     # ── UI construction ──────────────────────────────────────────────────────
 
@@ -128,8 +144,12 @@ class EditorWindow:
 
         # Status label (auto-save path)
         self._status_var = tk.StringVar()
-        if self.auto_saved_path:
+        if self.auto_saved_path and self._clipboard_copied:
+            self._status_var.set(f"Auto-saved: {self.auto_saved_path}  •  Copied to clipboard")
+        elif self.auto_saved_path:
             self._status_var.set(f"Auto-saved: {self.auto_saved_path}")
+        elif self._clipboard_copied:
+            self._status_var.set("Copied to clipboard")
         tk.Label(toolbar, textvariable=self._status_var, bg="#1E1E1E",
                  fg="#8A8A8A", font=("Segoe UI", 8)).pack(side="right", padx=10)
 
@@ -314,6 +334,40 @@ class EditorWindow:
         for s, btn in self._size_buttons.items():
             btn.configure(bg="#007ACC" if s == size else "#3C3F41")
 
+    def _root_exists(self) -> bool:
+        try:
+            return bool(self.root.winfo_exists())
+        except tk.TclError:
+            return False
+
+    def _after_ui(self, callback, *args):
+        try:
+            if self._root_exists():
+                self.root.after(0, lambda: self._call_if_alive(callback, *args))
+        except tk.TclError:
+            pass
+
+    def _call_if_alive(self, callback, *args):
+        if self._root_exists():
+            callback(*args)
+
+    def _set_status(self, text: str):
+        if self._root_exists():
+            self._status_var.set(text)
+
+    def _show_error(self, title: str, message: str):
+        if self._root_exists():
+            messagebox.showerror(title, message, parent=self.root)
+
+    @staticmethod
+    def _load_text_font(size: int):
+        for font_path in ("segoeui.ttf", r"C:\Windows\Fonts\segoeui.ttf"):
+            try:
+                return ImageFont.truetype(font_path, size)
+            except OSError:
+                pass
+        return ImageFont.load_default()
+
     # ── Canvas event handlers ─────────────────────────────────────────────────
 
     def _canvas_coords(self, event):
@@ -407,10 +461,10 @@ class EditorWindow:
             self._draw_arrow_pil(draw, x1, y1, x2, y2, self.color, w)
 
         elif self.tool == "rect":
-            draw.rectangle([x1, y1, x2, y2], outline=self.color, width=w)
+            draw.rectangle([min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)], outline=self.color, width=w)
 
         elif self.tool == "ellipse":
-            draw.ellipse([x1, y1, x2, y2], outline=self.color, width=w)
+            draw.ellipse([min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)], outline=self.color, width=w)
 
         self._push_history()
         self._refresh_canvas()
@@ -447,18 +501,28 @@ class EditorWindow:
             return
         text = self._text_entry.get()
         x, y = self._text_pos
-        if text.strip():
-            draw = ImageDraw.Draw(self.original)
-            draw.text((x, y), text, fill=self.color)
-            self._push_history()
-            self._refresh_canvas()
-        self.canvas.delete(self._text_window)
-        self._text_entry = None
+        text_window = self._text_window
+        try:
+            if text.strip():
+                font = self._load_text_font(self.size + 8)
+                draw = ImageDraw.Draw(self.original)
+                draw.text((x, y), text, fill=self.color, font=font)
+                self._push_history()
+                self._refresh_canvas()
+        finally:
+            if text_window is not None:
+                try:
+                    self.canvas.delete(text_window)
+                except tk.TclError:
+                    pass
+            self._text_entry = None
+            self._text_window = None
 
     def _cancel_text(self):
         if self._text_entry:
             self.canvas.delete(self._text_window)
             self._text_entry = None
+            self._text_window = None
 
     # ── History ──────────────────────────────────────────────────────────────
 
@@ -501,15 +565,24 @@ class EditorWindow:
         self.root.after(300, lambda: self._start_new_snip())
 
     def _start_new_snip(self):
-        from capture_overlay import CaptureOverlay
+        from capture_overlay import CaptureError, CaptureOverlay
         # Use the persistent tk root when available so the overlay is a proper Toplevel
         overlay_root = self._tk_root if self._tk_root else self.root
-        CaptureOverlay(self._on_new_capture, on_cancel=self.root.deiconify, root=overlay_root)
+        try:
+            CaptureOverlay(self._on_new_capture, on_cancel=self.root.deiconify, root=overlay_root)
+        except CaptureError as exc:
+            self.root.deiconify()
+            self._show_error("Capture Failed", str(exc))
 
     def _on_new_capture(self, image):
-        from main import auto_save
+        from main import AutoSaveError, auto_save, copy_image_to_clipboard
         self.root.deiconify()
-        path = auto_save(image, self.save_dir)
+        try:
+            path = auto_save(image, self.save_dir)
+        except AutoSaveError as exc:
+            path = None
+            self._show_error("Auto-save Failed", str(exc))
+        clipboard_ok = copy_image_to_clipboard(image)
         self.original = image.copy()
         self.capture = image.copy()
         self.history.clear()
@@ -517,7 +590,14 @@ class EditorWindow:
         self._push_history()
         self._refresh_canvas()
         self.auto_saved_path = path
-        self._status_var.set(f"Auto-saved: {path}")
+        if path and clipboard_ok:
+            self._status_var.set(f"Auto-saved: {path}  •  Copied to clipboard")
+        elif path:
+            self._status_var.set(f"Auto-saved: {path}")
+        elif clipboard_ok:
+            self._status_var.set("Copied to clipboard")
+        else:
+            self._status_var.set("Not auto-saved")
 
     # ── Auto-update ───────────────────────────────────────────────────────────
 
@@ -530,22 +610,27 @@ class EditorWindow:
             from updater import check_for_update
             info = check_for_update()
             if info:
-                self.root.after(0, self._show_update_banner, info)
-        except (ImportError, OSError, RuntimeError):
+                self._after_ui(self._show_update_banner, info)
+        except (ImportError, OSError):
             pass
 
     def _show_update_banner(self, info):
+        if not self._root_exists() or info is None:
+            return
         self._pending_update = info
         self._update_label.configure(
             text=f"Update available: v{info.current_version} → v{info.latest_version}"
         )
+        for w in self._update_banner.winfo_children():
+            if isinstance(w, tk.Button) and w.cget("text") in ("Downloading…", "Install & Restart"):
+                w.configure(state="normal", text="Install & Restart")
+                break
         self._update_banner.pack(fill="x", before=self.canvas.master)
 
     def _apply_update(self):
         if not self._pending_update:
             return
         import threading
-        from tkinter import messagebox
 
         # Disable button and show progress in the banner label
         for w in self._update_banner.winfo_children():
@@ -555,63 +640,102 @@ class EditorWindow:
 
         def run():
             try:
-                from updater import download_and_apply
+                from updater import UpdateError, download_and_apply
+            except ImportError as e:
+                err_msg = str(e)
+                self._after_ui(self._show_error, "Update Failed", err_msg)
+                self._after_ui(self._show_update_banner, self._pending_update)
+                return
 
+            try:
                 def progress(done, total):
                     if total:
                         pct = int(done / total * 100)
                         label_text = f"Downloading update… {pct}%"
-                        # noinspection PyTypeChecker
-                        self.root.after(0, lambda: self._update_label.configure(text=label_text))
+                        self._after_ui(lambda text=label_text: self._update_label.configure(text=text))
 
                 download_and_apply(self._pending_update, progress_callback=progress)
-            except (OSError, RuntimeError) as e:
+            except (OSError, UpdateError) as e:
                 err_msg = str(e)
-                # noinspection PyTypeChecker
-                self.root.after(0, lambda: messagebox.showerror("Update Failed", err_msg))
-                # noinspection PyTypeChecker
-                self.root.after(0, lambda: self._show_update_banner(self._pending_update))
+                self._after_ui(self._show_error, "Update Failed", err_msg)
+                self._after_ui(self._show_update_banner, self._pending_update)
 
         threading.Thread(target=run, daemon=True).start()
 
     def _copy_to_clipboard(self):
+        try:
+            self._commit_text()
+        except (OSError, ValueError, tk.TclError) as exc:
+            self._set_status(f"Text failed: {exc}")
+            return
         import win32clipboard
+        import pywintypes
         import io
         output = io.BytesIO()
         img = self.original.convert("RGB")
         img.save(output, format="BMP")
         data = output.getvalue()[14:]
-        win32clipboard.OpenClipboard()
-        win32clipboard.EmptyClipboard()
-        win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
-        win32clipboard.CloseClipboard()
-        self._status_var.set("Copied to clipboard")
+        opened = False
+        try:
+            win32clipboard.OpenClipboard()
+            opened = True
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+            self._status_var.set("Copied to clipboard")
+        except pywintypes.error as exc:
+            self._status_var.set(f"Clipboard unavailable: {exc}")
+        finally:
+            if opened:
+                try:
+                    win32clipboard.CloseClipboard()
+                except pywintypes.error:
+                    pass
 
     def _copy_path(self):
         if not self.auto_saved_path:
             self._status_var.set("No saved path to copy")
             return
         import win32clipboard
-        win32clipboard.OpenClipboard()
-        win32clipboard.EmptyClipboard()
-        win32clipboard.SetClipboardText(self.auto_saved_path, win32clipboard.CF_UNICODETEXT)
-        win32clipboard.CloseClipboard()
-        self._status_var.set(f"Path copied: {self.auto_saved_path}")
+        import pywintypes
+        opened = False
+        try:
+            win32clipboard.OpenClipboard()
+            opened = True
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardText(self.auto_saved_path, win32clipboard.CF_UNICODETEXT)
+            self._status_var.set(f"Path copied: {self.auto_saved_path}")
+        except pywintypes.error as exc:
+            self._status_var.set(f"Clipboard unavailable: {exc}")
+        finally:
+            if opened:
+                try:
+                    win32clipboard.CloseClipboard()
+                except pywintypes.error:
+                    pass
 
     def _save_as(self):
+        try:
+            self._commit_text()
+        except (OSError, ValueError, tk.TclError) as exc:
+            self._set_status(f"Text failed: {exc}")
+            return
         path = filedialog.asksaveasfilename(
             defaultextension=".png",
             filetypes=[("PNG image", "*.png"), ("JPEG image", "*.jpg"), ("All files", "*.*")],
             initialdir=self.save_dir,
         )
         if path:
-            self.original.convert("RGB").save(path)
-            if (self.auto_saved_path
-                    and os.path.exists(self.auto_saved_path)
-                    and os.path.abspath(self.auto_saved_path) != os.path.abspath(path)):
-                os.remove(self.auto_saved_path)
-            self.auto_saved_path = path
-            self._status_var.set(f"Saved: {path}")
+            try:
+                self.original.convert("RGB").save(path)
+                if (self.auto_saved_path
+                        and os.path.exists(self.auto_saved_path)
+                        and os.path.abspath(self.auto_saved_path) != os.path.abspath(path)):
+                    os.remove(self.auto_saved_path)
+                self.auto_saved_path = path
+                self._status_var.set(f"Saved: {path}")
+            except OSError as exc:
+                self._show_error("Save Failed", str(exc))
+                self._status_var.set("Save failed")
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

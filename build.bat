@@ -1,6 +1,6 @@
 @echo off
 :: ============================================================
-:: build.bat — builds ScreenshotTool and installer
+:: build.bat -- builds ScreenshotTool and installer
 :: Run from the project folder:  build.bat
 :: Requires:
 ::   pip install pyinstaller
@@ -8,14 +8,23 @@
 :: ============================================================
 
 :: Read version from version.py
-for /f "tokens=3 delims= " %%v in ('findstr "__version__" version.py') do set VERSION=%%~v
+for /f "usebackq delims=" %%v in (`python -c "from version import __version__; print(__version__)"`) do set "VERSION=%%v"
+if not defined VERSION (
+    echo ERROR: Could not read version from version.py.
+    exit /b 1
+)
+for /f "usebackq delims=" %%p in (`python -c "import sys; print(sys.base_prefix)"`) do set "PY_BASE=%%p"
+if not defined PY_BASE (
+    echo ERROR: Could not locate Python base directory.
+    exit /b 1
+)
 
 echo ============================================================
 echo  Building Screenshot Tool v%VERSION%
 echo ============================================================
 echo.
 
-:: ── Step 1: PyInstaller ──────────────────────────────────────
+:: -- Step 1: PyInstaller ---------------------------------------
 echo [1/3] Cleaning previous build...
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
@@ -30,6 +39,12 @@ pyinstaller ^
     --icon=screenshot_tool_icon.ico ^
     --add-data="screenshot_tool_icon.ico;." ^
     --add-data="screenshot_tool_icon.png;." ^
+    --add-data="%PY_BASE%\tcl;tcl" ^
+    --add-binary="%PY_BASE%\DLLs\_tkinter.pyd;." ^
+    --add-binary="%PY_BASE%\DLLs\tcl86t.dll;." ^
+    --add-binary="%PY_BASE%\DLLs\tk86t.dll;." ^
+    --hidden-import=tkinter ^
+    --hidden-import=_tkinter ^
     --hidden-import=PIL._tkinter_finder ^
     --collect-all=PIL ^
     --collect-all=pystray ^
@@ -50,7 +65,7 @@ if errorlevel 1 (
 echo [1/3] PyInstaller complete.
 echo.
 
-:: ── Step 2: Inno Setup installer ─────────────────────────────
+:: -- Step 2: Inno Setup installer ------------------------------
 echo [2/3] Building installer with Inno Setup...
 
 set ISCC=""
@@ -77,7 +92,7 @@ if errorlevel 1 (
 echo [2/3] Installer created: dist\ScreenshotToolSetup.exe
 echo.
 
-:: ── Step 3: Create zips ──────────────────────────────────────
+:: -- Step 3: Create zips ---------------------------------------
 :zips
 echo [3/3] Creating zip archives...
 
@@ -89,7 +104,7 @@ echo   Created: dist\ScreenshotTool_FullInstall.zip  (manual install)
 
 echo.
 echo ============================================================
-echo  Build complete — v%VERSION%
+echo  Build complete -- v%VERSION%
 echo ============================================================
 echo.
 echo  dist\ScreenshotTool\ScreenshotTool.exe        ^<-- test this first

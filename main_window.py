@@ -1,7 +1,7 @@
 """Home/launcher window — shown on startup and after each snip session."""
 
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 import os
 import sys
 from pathlib import Path
@@ -78,14 +78,17 @@ class MainWindow:
         path_frame = tk.Frame(self.win, bg="#2B2B2B")
         path_frame.pack(fill="x", padx=28, pady=(6, 4))
 
-        saved = self._cfg.get("save_dir", self._default_save_dir)
+        saved = self._valid_or_default_save_dir(self._cfg.get("save_dir", self._default_save_dir))
         self._path_var = tk.StringVar(value=saved)
+        self._last_valid_save_dir = saved
 
-        tk.Entry(
+        path_entry = tk.Entry(
             path_frame, textvariable=self._path_var,
             font=("Segoe UI", 9), bg="#3C3F41", fg="white",
             relief="flat", insertbackground="white", width=38,
-        ).pack(side="left", fill="x", expand=True, ipady=6, padx=(0, 6))
+        )
+        path_entry.pack(side="left", fill="x", expand=True, ipady=6, padx=(0, 6))
+        path_entry.bind("<FocusOut>", self._on_path_focus_out)
 
         tk.Button(
             path_frame, text="Browse…", command=self._browse,
@@ -102,6 +105,24 @@ class MainWindow:
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
+    def _on_path_focus_out(self, _event=None):
+        path = self._path_var.get().strip()
+        if not self._is_writable_dir(path):
+            self._path_var.set(self._last_valid_save_dir)
+            messagebox.showerror(
+                "Invalid Save Location",
+                "Choose an existing folder that this app can write to.",
+            )
+            return
+
+        self._last_valid_save_dir = str(Path(path).expanduser())
+        self._path_var.set(self._last_valid_save_dir)
+        self._cfg["save_dir"] = self._last_valid_save_dir
+        try:
+            save_config(self._cfg)
+        except OSError as exc:
+            messagebox.showerror("Config Save Failed", str(exc))
+
     def _browse(self):
         current = self._path_var.get()
         folder = filedialog.askdirectory(
@@ -109,11 +130,18 @@ class MainWindow:
         )
         if folder:
             self._path_var.set(folder)
+            self._last_valid_save_dir = folder
             self._cfg["save_dir"] = folder
-            save_config(self._cfg)
+            try:
+                save_config(self._cfg)
+            except OSError as exc:
+                messagebox.showerror("Config Save Failed", str(exc))
 
     def get_save_dir(self) -> str:
-        return self._path_var.get() or self._default_save_dir
+        path = self._path_var.get().strip()
+        if self._is_writable_dir(path):
+            return path
+        return self._default_save_dir
 
     def show(self):
         self.win.deiconify()
@@ -164,13 +192,42 @@ class MainWindow:
     # ── Capture ───────────────────────────────────────────────────────────────
 
     def _do_snip(self):
-        from capture_overlay import CaptureOverlay
-        CaptureOverlay(self._on_capture, on_cancel=self.show, root=self._tk_root)
+        from capture_overlay import CaptureError, CaptureOverlay
+        try:
+            CaptureOverlay(self._on_capture, on_cancel=self.show, root=self._tk_root)
+        except CaptureError as exc:
+            messagebox.showerror("Capture Failed", str(exc))
+            self.show()
 
     def _on_capture(self, image):
-        from main import auto_save
+        from main import AutoSaveError, auto_save, copy_image_to_clipboard
         from editor_window import EditorWindow
         save_dir = self.get_save_dir()
-        path = auto_save(image, save_dir)
-        EditorWindow(image, save_dir, path, tk_root=self._tk_root)
+        try:
+            path = auto_save(image, save_dir)
+        except AutoSaveError as exc:
+            path = None
+            messagebox.showerror("Auto-save Failed", str(exc))
+        clipboard_ok = copy_image_to_clipboard(image)
+        EditorWindow(image, save_dir, path, tk_root=self._tk_root, clipboard_copied=clipboard_ok)
         self.show()
+
+    def _valid_or_default_save_dir(self, path: str) -> str:
+        if self._is_writable_dir(path):
+            return str(Path(path).expanduser())
+        return self._default_save_dir
+
+    @staticmethod
+    def _is_writable_dir(path: str) -> bool:
+        if not path:
+            return False
+        candidate = Path(path).expanduser()
+        if not candidate.is_dir():
+            return False
+        test_file = candidate / f".screenshot_tool_write_test_{os.getpid()}"
+        try:
+            test_file.write_text("", encoding="utf-8")
+            test_file.unlink(missing_ok=True)
+            return True
+        except OSError:
+            return False

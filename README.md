@@ -10,7 +10,8 @@ A lightweight screenshot and annotation tool for Windows, inspired by the Window
 - **Capture timer** — 3 or 5 second countdown with a corner overlay before capture begins
 - **Custom save location** — choose any folder from the home window; persists between sessions
 - **System tray** — app lives in the tray after the home window is closed; right-click for Open, New Snip, or Exit
-- **Global hotkey** — `Ctrl+Shift+S` triggers a new snip from anywhere, even when minimized to tray
+- **Auto-copy to clipboard** — every capture is instantly copied to the clipboard so you can Ctrl+V immediately
+- **Global hotkey** — `Ctrl+Shift+S` triggers a new snip from anywhere; if the editor is already open it reuses it instead of opening a second window
 - **Annotation tools:**
   - Pen — freehand drawing
   - Marker — semi-transparent highlight

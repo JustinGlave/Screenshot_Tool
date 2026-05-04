@@ -30,6 +30,7 @@ import urllib.request
 import urllib.error
 import json
 import logging
+import zlib
 from dataclasses import dataclass
 from typing import Optional
 from pathlib import Path
@@ -53,6 +54,18 @@ class UpdateInfo:
     latest_version:  str
     download_url:    str
     release_notes:   str
+
+
+class UpdateError(RuntimeError):
+    """Raised when an update cannot be checked, downloaded, or applied."""
+
+
+class UpdateDownloadError(UpdateError):
+    """Raised when the update archive cannot be downloaded completely."""
+
+
+class UpdateValidationError(UpdateError):
+    """Raised when a downloaded update archive is structurally invalid."""
 
 
 def _parse_version(tag: str) -> tuple[int, ...]:
@@ -111,7 +124,7 @@ def check_for_update() -> Optional[UpdateInfo]:
     except urllib.error.URLError as exc:
         logger.debug("Update check failed (network): %s", exc)
         return None
-    except Exception as exc:
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
         logger.warning("Update check failed: %s", exc)
         return None
 
@@ -121,10 +134,10 @@ def download_and_apply(info: UpdateInfo, progress_callback=None) -> None:
     Download the new zip, extract it over the current exe, and restart.
 
     progress_callback(bytes_done, total_bytes) is called during download.
-    Raises RuntimeError on failure so the caller can show an error dialog.
+    Raises UpdateError on failure so the caller can show an error dialog.
     """
     if not getattr(sys, "frozen", False):
-        raise RuntimeError(
+        raise UpdateError(
             "Update can only be applied to a compiled build.\n"
             "You are running from source — pull the latest code from GitHub instead."
         )
@@ -133,17 +146,19 @@ def download_and_apply(info: UpdateInfo, progress_callback=None) -> None:
 
     tmp_fd, tmp_zip_str = tempfile.mkstemp(suffix=".zip")
     tmp_zip = Path(tmp_zip_str)
+    tmp_fd_open = True
 
     try:
         req = urllib.request.Request(
             info.download_url,
             headers={"User-Agent": "ScreenshotTool"},
         )
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            total = int(resp.headers.get("Content-Length", 0))
-            done  = 0
-            chunk = 64 * 1024
-            with open(tmp_fd, "wb") as fh:
+        with os.fdopen(tmp_fd, "wb") as fh:
+            tmp_fd_open = False
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                total = int(resp.headers.get("Content-Length", 0))
+                done  = 0
+                chunk = 64 * 1024
                 while True:
                     block = resp.read(chunk)
                     if not block:
@@ -153,18 +168,48 @@ def download_and_apply(info: UpdateInfo, progress_callback=None) -> None:
                     if progress_callback:
                         progress_callback(done, total)
 
-        if total > 0 and tmp_zip.stat().st_size < total:
+        actual_size = tmp_zip.stat().st_size
+        if total > 0 and actual_size < total:
             tmp_zip.unlink(missing_ok=True)
-            raise RuntimeError(
-                f"Download incomplete: got {tmp_zip.stat().st_size} of {total} bytes.\n"
+            raise UpdateDownloadError(
+                f"Download incomplete: got {actual_size} of {total} bytes.\n"
                 "Please try again or download manually from GitHub."
             )
 
-    except RuntimeError:
-        raise
-    except Exception as exc:
+    except UpdateDownloadError:
+        if tmp_fd_open:
+            os.close(tmp_fd)
         tmp_zip.unlink(missing_ok=True)
-        raise RuntimeError(f"Download failed: {exc}") from exc
+        raise
+    except (urllib.error.URLError, OSError, TimeoutError, ValueError) as exc:
+        if tmp_fd_open:
+            os.close(tmp_fd)
+        tmp_zip.unlink(missing_ok=True)
+        raise UpdateDownloadError(f"Download failed: {exc}") from exc
+
+    import zipfile
+    try:
+        with zipfile.ZipFile(tmp_zip) as zf:
+            if "ScreenshotTool.exe" not in zf.namelist():
+                raise UpdateValidationError(
+                    "Update zip does not contain ScreenshotTool.exe.\n"
+                    "Please try again or download manually from GitHub."
+                )
+            bad_file = zf.testzip()
+            if bad_file:
+                raise UpdateValidationError(
+                    f"Update zip contains a corrupt file: {bad_file}\n"
+                    "Please try again or download manually from GitHub."
+                )
+    except UpdateValidationError:
+        tmp_zip.unlink(missing_ok=True)
+        raise
+    except (zipfile.BadZipFile, OSError, ValueError, zlib.error, NotImplementedError) as exc:
+        tmp_zip.unlink(missing_ok=True)
+        raise UpdateValidationError(
+            "Downloaded update zip could not be validated.\n"
+            "Please try again or download manually from GitHub."
+        ) from exc
 
     pid      = os.getpid()
     exe_str  = str(current_exe)

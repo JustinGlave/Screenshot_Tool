@@ -1,7 +1,12 @@
 """Fullscreen translucent overlay for click-drag region selection."""
 
+import ctypes
 import tkinter as tk
 from PIL import ImageTk, ImageEnhance, ImageGrab
+
+
+class CaptureError(RuntimeError):
+    """Raised when the screen cannot be captured."""
 
 
 class CaptureOverlay:
@@ -24,14 +29,34 @@ class CaptureOverlay:
         else:
             self.root = root
 
-        # Grab full desktop (all monitors combined)
-        self.bg_image_pil = ImageGrab.grab(all_screens=True)
+        # Grab full desktop (all monitors combined), falling back to the primary screen.
+        using_virtual_screen = True
+        try:
+            self.bg_image_pil = ImageGrab.grab(all_screens=True)
+        except OSError as exc:
+            using_virtual_screen = False
+            try:
+                self.bg_image_pil = ImageGrab.grab()
+            except OSError as fallback_exc:
+                if self.on_cancel:
+                    self.on_cancel()
+                if self._owns_root:
+                    self.root.destroy()
+                raise CaptureError(f"Could not capture the screen:\n{fallback_exc}") from exc
         self.full_width, self.full_height = self.bg_image_pil.size
+
+        # Virtual screen origin may be negative when a monitor sits left/above the primary
+        SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN = 76, 77
+        if using_virtual_screen:
+            virt_x = ctypes.windll.user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+            virt_y = ctypes.windll.user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+        else:
+            virt_x = virt_y = 0
 
         self.overlay = tk.Toplevel(self.root)
         self.overlay.overrideredirect(True)
         self.overlay.attributes("-topmost", True)
-        self.overlay.geometry(f"{self.full_width}x{self.full_height}+0+0")
+        self.overlay.geometry(f"{self.full_width}x{self.full_height}+{virt_x}+{virt_y}")
         self.overlay.configure(cursor="crosshair")
 
         self.canvas = tk.Canvas(
